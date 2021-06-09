@@ -280,7 +280,7 @@ def decode_open(filename, mode='rt', encoding='utf-8'):
 
 
 def process_dump(input_file, template_file, out_file, file_size, file_compress,
-                 process_count, html_safe):
+                 process_count, html_safe, tokenizer):
     """
     :param input_file: name of the wikipedia dump file; '-' to read from stdin
     :param template_file: optional file with template definitions.
@@ -371,7 +371,7 @@ def process_dump(input_file, template_file, out_file, file_size, file_compress,
     workers = []
     for _ in range(max(1, process_count)):
         extractor = Process(target=extract_process,
-                            args=(jobs_queue, output_queue, html_safe))
+                            args=(jobs_queue, output_queue, html_safe, tokenizer))
         extractor.daemon = True  # only live while parent process lives
         extractor.start()
         workers.append(extractor)
@@ -532,6 +532,8 @@ def main():
                         help="write output in json format instead of the default <doc> format")
 
     groupP = parser.add_argument_group('Processing')
+    groupP.add_argument("--stanza-lang", 
+                        help="The language for the stanza tokenizer")
     groupP.add_argument("--html", action="store_true",
                         help="produce HTML output, subsumes --links")
     groupP.add_argument("-l", "--links", action="store_true",
@@ -595,6 +597,9 @@ def main():
     if not Extractor.keepLinks:
         ignoreTag('a')
 
+    stanza.download(args.stanza_lang)
+    tokenizer = stanza.Pipeline(processors="tokenize", lang=args.stanza_lang)
+
     # sharing cache of parser templates is too slow:
     # manager = Manager()
     # templateCache = manager.dict()
@@ -622,7 +627,7 @@ def main():
                 urlbase = base[:base.rfind("/")]
             else:
                 urlbase = ''
-            Extractor(id, revid, urlbase, title, [page]).extract(sys.stdout)
+            Extractor(id, revid, urlbase, title, [page], tokenizer).extract(sys.stdout)
         return
 
     output_path = args.output
@@ -634,7 +639,7 @@ def main():
             return
 
     process_dump(input_file, args.templates, output_path, file_size,
-                 args.compress, args.processes, args.html_safe)
+                 args.compress, args.processes, args.html_safe, tokenizer)
 
 
 if __name__ == '__main__':
